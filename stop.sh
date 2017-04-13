@@ -1,0 +1,1 @@
+python tianqisvr.py stop

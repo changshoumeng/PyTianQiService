@@ -1,0 +1,98 @@
+网络测试案例
+
+测试场景构造：
+-------------------------
+第一步：server在一个端口监听，提供ECHO服务；
+第二步：客户端就是阻塞的SOCKET实现；A、B、C建立对server的tcp连接；Server执行accept后监听连接的事件：
+self._epoll_loop.register(acceptor_fd, select.EPOLLET | select.EPOLLOUT | select.EPOLLIN)
+
+第三步：观察A、B、C对连接的操作，对server中EPOLL通知机制的影响；
+    def _checkSocketDataEvent(self, fileno, events):
+
+        # 异常事件
+        if events & (select.EPOLLHUP | select.EPOLLERR):
+            self._onFdExceptional(client_fd=fileno)
+            print_epoll_events(fileno, events)
+            return
+
+        # 合法事件
+        if events & select.EPOLLIN:
+            # <连接到达；有数据来临；>有 可读 事件激活
+            self._onFdReadable(client_fd=fileno)
+            return
+        if events & select.EPOLLPRI:
+            # <   外带数据>
+            netLogger.warning("_checkSocketEvent EPOLLPRI")
+            self._onFdReadable(client_fd=fileno)
+            return
+        if events & select.EPOLLOUT:
+            # <有数据要写>有 可写 事件激活
+            self._onFdWritable(client_fd=fileno)
+            return
+
+1.操作：A连接Server，然后A 执行closesocket;
+  结果：EPOLLIN -> _onFdReadable -> recv 0
+
+2.操作：A连接Server，然后Kill -9 进程
+  结果：select.EPOLLOUT 8:select.EPOLLERR 16:select.EPOLLHUP 同时发生，触发_onFdExceptional操作；
+       原因是tcp连接强制断开；
+       连接中出现RST的情况。连接复位Reset a connection.
+       5种TCP连接中出现RST的情况。连接复位Reset a connection.参考：http://blog.csdn.net/hzw05103020/article/details/50806759
+
+3.操作：A连接Server，然后拔掉A的网线
+  结果：server端没有任何通知，再连接上网线，发送消息，可以发送消息成功；
+
+4.操作：A连接Server，执行以下指令：
+        clientSock.send(data)
+        clientSock.shutdown(SHUT_RD)
+  结果：1:select.EPOLLIN 4:select.EPOLLOUT 8:select.EPOLLERR 16:select.EPOLLHUP 同时触发_onFdExceptional操作；
+
+
+5.操作：A连接Server，执行以下指令：
+      clientSock.send(data)
+      clientSock.shutdown(SHUT_WR)
+  结果：EPOLLIN -> _onFdReadable -> recv 0
+
+
+6.操作：A连接Server，执行以下指令：
+      clientSock.send(data)
+      clientSock.shutdown(SHUT_RDWR)
+  结果：EPOLLIN -> _onFdReadable -> recv 0
+
+7.操作：A连接Server，Server等待5s后执行以下指令：
+       self.accept_socket.shutdown(SHUT_RD)
+  结果：EPOLLIN -> _onFdReadable -> recv 0
+
+
+8.操作：A连接Server，Server等待5s后执行以下指令：
+       self.accept_socket.shutdown(SHUT_WR)
+  结果：没有任何通知；
+        然后A发送一条消息，Server接收到此消息成功，然后Send此消息时出现'Broken pipe'错误，
+
+
+9.操作：A连接Server，Server等待5s后执行以下指令：
+       self.accept_socket.shutdown(SHUT_RDWR)
+  结果：1:select.EPOLLIN 4:select.EPOLLOUT 16:select.EPOLLHUP 同时触发_onFdExceptional操作；
+       如果执行_onFdExceptional操作之后，继续再执行_onFdReadable()，会发现  recv 0
+
+
+10.操作：A连接Server，Server等待5s后执行以下指令：
+        self.accept_socket.close()
+    结果：没有任何通知；
+         然后A执行发送消息，Server也没有任何通知，A也发送成功了，但是A接收时recv 0;
+         最后A执行close()， Server也没有任何通知
+
+
+
+10.操作：A连接Server，Server等待5s后执行以下指令：
+        self.accept_socket.shutdown(SHUT_RDWR)
+        self.accept_socket.close()
+   结果：没有任何通知；
+         但是5s后，出现 Bad file descriptor，这是因为close之后没有触发Epoll，EPoll不再监听此
+         socket导致没有从定时器移除这个socket，定时器接下来触发了在一个无效socket再次执行任何操作操作导致；
+
+
+
+
+
+
