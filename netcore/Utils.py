@@ -9,6 +9,8 @@ import os
 import time
 
 def file2str(file_name):
+    if not os.path.exists(file_name):
+	return ""
     with open(file_name,'r') as f:
         return f.read().strip()
 
@@ -16,6 +18,9 @@ def file2str(file_name):
 def dec2hex(dec):
     s=hex(dec)
     return s[2:]
+
+def getYmdHMS():
+    return time.strftime("[%Y-%m-%d %H:%M:%S]", time.localtime(time.time()))
 
 
 # 毫秒级别时间戳

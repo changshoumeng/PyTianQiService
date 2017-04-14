@@ -193,34 +193,50 @@ def process_entry(serv):
 
 def process_exit(service_name='',server={}):
     global work_process_count
-    print "******process_exit*****"
+    print "******process_exit*****",Utils.getYmdHMS()
     master_pid=Utils.file2str('run/master.pid')
+    if not master_pid:
+	print "master_pid NULL"
+        return
     print "master_pid:",master_pid
     tcpservice_pid=Utils.file2str('run/tcpservice.pid')
+    if not tcpservice_pid:
+       print "tcpservice_pid NULL"
+       return
     print "tcpservice_pid:",tcpservice_pid
     worker_pids = [master_pid,tcpservice_pid]
     for i in xrange(work_process_count):
-        worker_pid_file='run/worker_{0}.pid'.format(i)
-        if os.path.exists(worker_pid_file):
-            worker_pid=Utils.file2str( worker_pid_file)
+        worker_pid_file='run/worker_{0}.pid'.format(i)        
+        worker_pid=Utils.file2str( worker_pid_file)
+        if worker_pid:
             worker_pids.append(worker_pid)
             print "worker_pid:",worker_pid
+
+    
     for pid in worker_pids:
         print "-------------------------------------"
         cmd='pidof python'
         results=commands.getoutput(cmd)
+        if not results:
+            print "No Python Process is running"
+	    return
+	killcmd='kill {0}'.format(pid) if master_pid==pid else 'kill -9 {0}'.format(pid)
         i=0
         while True:
             print i,cmd,"->",results," ->",pid
-            if (pid not in results) or i>=5:
-                break            
-	    cmd2='kill {0}'.format(pid)	    	    
-            print i,cmd2,commands.getstatusoutput( cmd2 )
-            time.sleep(3)
+            if (pid not in results) or i>=8:
+                break              
+	     	    
+            print i,killcmd,commands.getstatusoutput( killcmd )
+            time.sleep(2)
 	    results=commands.getoutput(cmd)
+            if not results:
+                break
 	    i += 1	
         print "Close pid:",pid
 
+    if not  server:
+	return
     ip,port=server["host"], server["port"]
     print "Service should work at:",ip,port
     result=os.popen("netstat -ntlp|grep {0}".format(port) ).read()
@@ -231,4 +247,48 @@ def process_exit(service_name='',server={}):
         return
     print "DONE"
 
+def process_is_running():
+    global work_process_count        
+    master_pid=Utils.file2str('run/master.pid')   
+    if not master_pid:
+        #print "master_pid NULL"
+        return False
+    tcpservice_pid=Utils.file2str('run/tcpservice.pid')
+    if not tcpservice_pid:
+        #print "tcpservice_pid NULL"
+        return False
+    worker_pids = [master_pid,tcpservice_pid]
+    for i in xrange(work_process_count):
+        worker_pid_file='run/worker_{0}.pid'.format(i)
+        worker_pid=Utils.file2str( worker_pid_file)
+        if  worker_pid:
+            worker_pids.append(worker_pid)
+            #print "workerid:",worker_pid,len(worker_pid)
+
+    #print worker_pids
+    cmd='pidof python'
+    results=commands.getoutput(cmd)
+    #print results
+    if not results:
+	return False
+ 
+    for pid in worker_pids:        
+	if pid not in results:
+	    return False
+    return True	
+    
+
+def process_monit():
+    while True:
+        if process_is_running():
+            print "OK"
+	    time.sleep(15)
+            continue
+        process_exit()
+        time.sleep(10)
+        os.popen("./start.sh")
+        time.sleep(2)
+        
+        
+	    
 

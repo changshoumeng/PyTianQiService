@@ -222,9 +222,6 @@ class MsgConsumer(MsgPipe.PipeOutput):
         pass
 
 def main():
-    DataSource.init_weather_citykeys()
-    KvCache.init_cache()
-    print "Cache Size:",KvCache.get_cache_size()
     BaseService.work_process_count = 10
     BaseService.project_index = 0
     MsgPipe.MsgPipe.callback = MsgConsumer()
@@ -238,6 +235,12 @@ def main():
 	if sys.argv[1]=="stop":
     	    BaseService.process_exit(service_name='tianqi',server=server)	
 	    return
+	if sys.argv[1]=="monit":
+	    BaseService.process_monit()
+	    return
+    DataSource.init_weather_citykeys()
+    KvCache.init_cache()
+    print "Cache Size:",KvCache.get_cache_size()
     BaseService.listen_addr_list = [(server["host"], server["port"])]
     managerLogger.debug("select project_index:%d ip:%s port:%d", BaseService.project_index, server["host"],
                         server["port"])
