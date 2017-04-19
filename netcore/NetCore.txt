@@ -68,7 +68,10 @@ self._epoll_loop.register(acceptor_fd, select.EPOLLET | select.EPOLLOUT | select
        self.accept_socket.shutdown(SHUT_WR)
   结果：没有任何通知；
         然后A发送一条消息，Server接收到此消息成功，然后Send此消息时出现'Broken pipe'错误，
-
+    
+        20170419日再次测试：结果是
+        select.EPOLLIN 4:select.EPOLLOUT 16:select.EPOLLHUP,同时触发_onFdExceptional操作；
+       
 
 9.操作：A连接Server，Server等待5s后执行以下指令：
        self.accept_socket.shutdown(SHUT_RDWR)
